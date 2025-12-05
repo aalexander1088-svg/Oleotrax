@@ -2,6 +2,7 @@ from flask import Flask, request, send_file, render_template_string
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
+from reportlab.lib.utils import ImageReader
 import tempfile
 import os
 from datetime import datetime
@@ -141,8 +142,8 @@ HTML_TEMPLATE = '''
             </div>
             
             <div class="form-group">
-                <label>Endereço *</label>
-                <textarea name="endereco" required></textarea>
+                <label>Endereço Completo *</label>
+                <textarea name="endereco" required placeholder="Rua, número, bairro, cidade/estado"></textarea>
             </div>
             
             <div class="row">
@@ -152,7 +153,7 @@ HTML_TEMPLATE = '''
                 </div>
                 <div class="form-group">
                     <label>Acondicionamento *</label>
-                    <input type="text" name="acond" required>
+                    <input type="text" name="acond" required placeholder="Ex: Bombona plástica 50L">
                 </div>
             </div>
             
@@ -168,12 +169,12 @@ HTML_TEMPLATE = '''
 '''
 
 def generate_pdf(data):
-    """Generate the certificate PDF"""
+    """Generate the certificate PDF with proper formatting"""
     temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     
     c = canvas.Canvas(temp_pdf.name, pagesize=A4)
     w, h = A4
-    m = 15
+    m = 20  # Better margins
     
     # Parse date
     date_obj = datetime.strptime(data['data'], '%Y-%m-%d')
@@ -184,17 +185,18 @@ def generate_pdf(data):
     ano = date_obj.year
     data_fmt = date_obj.strftime('%d/%m/%Y')
     
-    # Green header with white circle for logo placeholder
+    # Green header
     c.setFillColor(HexColor('#1e7a4d'))
     c.rect(0, h - 50, w, 50, fill=1, stroke=0)
     
+    # White circle
     c.setFillColor(HexColor('#ffffff'))
     c.circle(w/2, h - 25, 40, fill=1, stroke=0)
     
-    # OLEOTRAX text in circle
-    c.setFillColor(HexColor('#1e7a4d'))
-    c.setFont('Helvetica-Bold', 14)
-    c.drawCentredString(w/2, h - 28, 'OLEOTRAX')
+    # Logo
+    logo_path = os.path.join(os.path.dirname(__file__), 'logo.png')
+    if os.path.exists(logo_path):
+        c.drawImage(logo_path, w/2 - 25, h - 49, width=50, height=50, mask='auto')
     
     # Title
     c.setFillColor(HexColor('#000000'))
@@ -202,24 +204,26 @@ def generate_pdf(data):
     c.drawCentredString(w/2, h - 70, 'CERTIFICADO DE COLETA E DESCARTE')
     
     # Date
-    y = h - 90
+    y = h - 95
     c.setFont('Helvetica', 11)
     c.drawString(m, y, f'Data: {dia} de {mes} de {ano}')
     
-    # Body
-    y -= 12
+    # Body text with proper line spacing
+    y -= 15
     c.setFont('Helvetica', 10)
     
-    c.drawString(m, y, f"Certificamos que {data['empresa']}, pessoa jurídica de direito privado,")
+    # Paragraph 1
+    c.drawString(m, y, f"Certificamos que {data['empresa']}, pessoa jurídica de direito privado, inscrita no")
     y -= 5
-    c.drawString(m, y, f"inscrita no CNPJ/MF sob nº {data['cnpj']}, com sede {data['endereco']},")
+    c.drawString(m, y, f"CNPJ/MF sob nº {data['cnpj']}, com sede {data['endereco']}, destina")
     y -= 5
-    c.drawString(m, y, f"destina seus resíduos de óleo e gordura vegetal de forma sustentável, dando um destino")
+    c.drawString(m, y, "seus resíduos de óleo e gordura vegetal de forma sustentável, dando um destino")
     y -= 5
-    c.drawString(m, y, f"ambientalmente correto aos resíduos de gordura e óleo vegetal de seu estabelecimento.")
+    c.drawString(m, y, "ambientalmente correto aos resíduos de gordura e óleo vegetal de seu estabelecimento.")
     
-    y -= 10
-    c.drawString(m, y, f"Os resíduos são armazenados de forma adequada, em recipientes específicos devidamente")
+    # Paragraph 2
+    y -= 12
+    c.drawString(m, y, "Os resíduos são armazenados de forma adequada, em recipientes específicos devidamente")
     y -= 5
     
     text = "higienizados e fechados, sendo destinados pela "
@@ -235,16 +239,16 @@ def generate_pdf(data):
     c.setFont('Helvetica-Bold', 10)
     c.drawString(m, y, '59.750.105/0001-00, Autorização Ambiental IMA/SC nº 097/2025')
     c.setFont('Helvetica', 10)
-    c.drawString(m + c.stringWidth('59.750.105/0001-00, Autorização Ambiental IMA/SC nº 097/2025', 'Helvetica-Bold', 10), y, '.')
     
-    y -= 10
-    c.drawString(m, y, f"Certificamos ainda, que o resíduo foi coletado e destinado de forma ambientalmente correta")
+    # Paragraph 3
+    y -= 12
+    c.drawString(m, y, "Certificamos ainda, que o resíduo foi coletado e destinado de forma ambientalmente correta")
     y -= 5
     c.drawString(m, y, 'conforme segue:')
     
-    # Vertical table
-    y -= 12
-    lw, vw, rh = 60, 120, 10
+    # Table - properly formatted
+    y -= 15
+    lw, vw, rh = 70, 110, 11
     
     rows = [
         ('Descrição', 'Óleo vegetal usado'),
@@ -252,24 +256,28 @@ def generate_pdf(data):
         ('Unidade de Medida', 'Litros (L)'),
         ('Classe do Resíduo', 'Classe II'),
         ('Data de Recebimento', data_fmt),
-        ('Acondicionamento', data['acond'])
+        ('Acondicionamento', data['acond'][:30])  # Limit length
     ]
     
     c.setLineWidth(0.5)
+    c.setStrokeColor(HexColor('#000000'))
     
     for label, value in rows:
+        # Label cell (light green)
         c.setFillColor(HexColor('#dcf0dc'))
         c.rect(m, y, lw, rh, fill=1, stroke=1)
         
+        # Value cell (white)
         c.setFillColor(HexColor('#ffffff'))
         c.rect(m + lw, y, vw, rh, fill=1, stroke=1)
         
+        # Text
         c.setFillColor(HexColor('#000000'))
         c.setFont('Helvetica-Bold', 9)
-        c.drawString(m + 2, y + 6.5, label)
+        c.drawString(m + 3, y + 7, label)
         
         c.setFont('Helvetica', 9)
-        c.drawString(m + lw + 2, y + 6.5, value)
+        c.drawString(m + lw + 3, y + 7, value)
         
         y -= rh
     
