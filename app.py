@@ -2,9 +2,6 @@ from flask import Flask, request, send_file, render_template_string
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
-from reportlab.platypus import Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT
 import tempfile
 import os
 from datetime import datetime
@@ -170,37 +167,13 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-def draw_wrapped_text(c, text, x, y, max_width, font_name='Helvetica', font_size=10):
-    """Helper to draw text that wraps properly"""
-    c.setFont(font_name, font_size)
-    words = text.split()
-    lines = []
-    current_line = []
-    
-    for word in words:
-        test_line = ' '.join(current_line + [word])
-        if c.stringWidth(test_line, font_name, font_size) <= max_width:
-            current_line.append(word)
-        else:
-            if current_line:
-                lines.append(' '.join(current_line))
-            current_line = [word]
-    
-    if current_line:
-        lines.append(' '.join(current_line))
-    
-    for line in lines:
-        c.drawString(x, y, line)
-        y -= font_size * 1.2  # Line spacing
-    
-    return y
-
 def generate_pdf(data):
-    """Generate the certificate PDF with proper text wrapping"""
+    """Generate certificate matching the original exactly"""
     temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     
     c = canvas.Canvas(temp_pdf.name, pagesize=A4)
     w, h = A4
+    m = 20
     
     # Parse date
     date_obj = datetime.strptime(data['data'], '%Y-%m-%d')
@@ -229,79 +202,105 @@ def generate_pdf(data):
     c.setFont('Helvetica-Bold', 18)
     c.drawCentredString(w/2, h - 70, 'CERTIFICADO DE COLETA E DESCARTE')
     
-    # Reset to black
-    c.setFillColor(HexColor('#000000'))
-    
     # Date
     y = h - 100
     c.setFont('Helvetica', 11)
-    c.drawString(25, y, f'Data: {dia} de {mes} de {ano}')
-    
-    # Body text - use text wrapping
-    y -= 20
-    max_width = w - 50  # 25mm margins on each side
+    c.drawString(m, y, f'Data: {dia} de {mes} de {ano}')
     
     # Paragraph 1
-    para1 = f"Certificamos que {data['empresa']}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob nº {data['cnpj']}, com sede {data['endereco']}, destina seus resíduos de óleo e gordura vegetal de forma sustentável, dando um destino ambientalmente correto aos resíduos de gordura e óleo vegetal de seu estabelecimento."
-    y = draw_wrapped_text(c, para1, 25, y, max_width, 'Helvetica', 10)
+    y -= 18
+    c.setFont('Helvetica', 10)
+    c.drawString(m, y, f"Certificamos que {data['empresa']}, pessoa jurídica de direito privado, inscrita no")
+    y -= 12
+    c.drawString(m, y, f"CNPJ/MF sob nº {data['cnpj']}, com sede {data['endereco']},")
+    y -= 12
+    c.drawString(m, y, "destina seus resíduos de óleo e gordura vegetal de forma sustentável, dando um destino")
+    y -= 12
+    c.drawString(m, y, "ambientalmente correto aos resíduos de gordura e óleo vegetal de seu estabelecimento.")
     
     # Paragraph 2
-    y -= 8
-    para2_part1 = "Os resíduos são armazenados de forma adequada, em recipientes específicos devidamente higienizados e fechados, sendo destinados pela"
-    y = draw_wrapped_text(c, para2_part1, 25, y, max_width, 'Helvetica', 10)
-    
-    # Bold OLEOTRAX LTDA
+    y -= 18
+    c.drawString(m, y, "Os resíduos são armazenados de forma adequada, em recipientes específicos devidamente")
+    y -= 12
+    text = "higienizados e fechados, sendo destinados pela "
+    c.drawString(m, y, text)
+    x_pos = m + c.stringWidth(text, 'Helvetica', 10)
     c.setFont('Helvetica-Bold', 10)
-    c.drawString(25, y, 'OLEOTRAX LTDA')
-    oleotrax_width = c.stringWidth('OLEOTRAX LTDA', 'Helvetica-Bold', 10)
+    c.drawString(x_pos, y, 'OLEOTRAX LTDA')
+    x_pos += c.stringWidth('OLEOTRAX LTDA', 'Helvetica-Bold', 10)
     c.setFont('Helvetica', 10)
-    c.drawString(25 + oleotrax_width + 5, y, ', CNPJ/MF nº')
+    c.drawString(x_pos, y, ', CNPJ/MF nº')
     y -= 12
     
     c.setFont('Helvetica-Bold', 10)
-    c.drawString(25, y, '59.750.105/0001-00, Autorização Ambiental IMA/SC nº 097/2025.')
-    y -= 12
+    c.drawString(m, y, '59.750.105/0001-00, Autorização Ambiental IMA/SC nº 097/2025.')
     
     # Paragraph 3
+    y -= 18
     c.setFont('Helvetica', 10)
-    para3 = "Certificamos ainda, que o resíduo foi coletado e destinado de forma ambientalmente correta conforme segue:"
-    y = draw_wrapped_text(c, para3, 25, y, max_width, 'Helvetica', 10)
+    c.drawString(m, y, "Certificamos ainda, que o resíduo foi coletado e destinado de forma ambientalmente correta")
+    y -= 12
+    c.drawString(m, y, "conforme segue:")
     
-    # Table
-    y -= 15
-    table_x = 25
-    lw, vw, rh = 70, 110, 12
+    # HORIZONTAL TABLE (like original)
+    y -= 20
+    table_x = m
+    table_width = w - (2 * m)
+    header_height = 10
+    row_height = 10
     
-    rows = [
-        ('Descrição', 'Óleo vegetal usado'),
-        ('Quantidade', f"{data['quantidade']} L"),
-        ('Unidade de Medida', 'Litros (L)'),
-        ('Classe do Resíduo', 'Classe II'),
-        ('Data de Recebimento', data_fmt),
-        ('Acondicionamento', data['acond'][:25])
+    # Column widths (proportional to content)
+    cols = [
+        {'w': 45, 'label': 'Descrição'},
+        {'w': 20, 'label': 'Quant'},
+        {'w': 35, 'label': 'Unidade de Medida'},
+        {'w': 35, 'label': 'Classe do Resíduo'},
+        {'w': 25, 'label': 'Data de Receb'},
+        {'w': 20, 'label': 'Acond.'}
     ]
     
     c.setLineWidth(0.5)
     c.setStrokeColor(HexColor('#000000'))
     
-    for label, value in rows:
-        # Label cell (light green)
-        c.setFillColor(HexColor('#dcf0dc'))
-        c.rect(table_x, y - rh, lw, rh, fill=1, stroke=1)
-        
-        # Value cell (white)
-        c.setFillColor(HexColor('#ffffff'))
-        c.rect(table_x + lw, y - rh, vw, rh, fill=1, stroke=1)
-        
-        # Text - positioned INSIDE the cells properly
-        c.setFillColor(HexColor('#000000'))
-        c.setFont('Helvetica-Bold', 9)
-        c.drawString(table_x + 3, y - 8, label)
-        
-        c.setFont('Helvetica', 9)
-        c.drawString(table_x + lw + 3, y - 8, value)
-        
-        y -= rh
+    # Header row (light green)
+    c.setFillColor(HexColor('#dcf0dc'))
+    c.rect(table_x, y, table_width, header_height, fill=1, stroke=1)
+    
+    # Header text
+    c.setFillColor(HexColor('#000000'))
+    c.setFont('Helvetica-Bold', 9)
+    x = table_x
+    for col in cols:
+        c.drawString(x + 2, y + 6, col['label'])
+        # Vertical line
+        if x > table_x:
+            c.line(x, y, x, y + header_height)
+        x += col['w']
+    
+    # Data row
+    y -= row_height
+    c.setFillColor(HexColor('#ffffff'))
+    c.rect(table_x, y, table_width, row_height, fill=1, stroke=1)
+    
+    # Data values
+    c.setFillColor(HexColor('#000000'))
+    c.setFont('Helvetica', 9)
+    values = [
+        'Óleo vegetal usado',
+        data['quantidade'],
+        'L',
+        'Classe II',
+        data_fmt,
+        data['acond'][:10]
+    ]
+    
+    x = table_x
+    for i, col in enumerate(cols):
+        c.drawString(x + 2, y + 6, str(values[i]))
+        # Vertical line
+        if x > table_x:
+            c.line(x, y, x, y + row_height)
+        x += col['w']
     
     # Footer
     c.setFillColor(HexColor('#787878'))
