@@ -8,6 +8,11 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+# Health check endpoint for Railway
+@app.route('/health')
+def health():
+    return {'status': 'ok'}, 200
+
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -242,14 +247,14 @@ def generate_pdf(data):
     y -= 12
     c.drawString(m, y, "conforme segue:")
     
-    # HORIZONTAL TABLE (like original)
+    # HORIZONTAL TABLE
     y -= 20
     table_x = m
     table_width = w - (2 * m)
     header_height = 10
     row_height = 10
     
-    # Column widths (proportional to content)
+    # Column widths
     cols = [
         {'w': 45, 'label': 'Descrição'},
         {'w': 20, 'label': 'Quant'},
@@ -262,17 +267,15 @@ def generate_pdf(data):
     c.setLineWidth(0.5)
     c.setStrokeColor(HexColor('#000000'))
     
-    # Header row (light green)
+    # Header row
     c.setFillColor(HexColor('#dcf0dc'))
     c.rect(table_x, y, table_width, header_height, fill=1, stroke=1)
     
-    # Header text
     c.setFillColor(HexColor('#000000'))
     c.setFont('Helvetica-Bold', 9)
     x = table_x
     for col in cols:
         c.drawString(x + 2, y + 6, col['label'])
-        # Vertical line
         if x > table_x:
             c.line(x, y, x, y + header_height)
         x += col['w']
@@ -282,7 +285,6 @@ def generate_pdf(data):
     c.setFillColor(HexColor('#ffffff'))
     c.rect(table_x, y, table_width, row_height, fill=1, stroke=1)
     
-    # Data values
     c.setFillColor(HexColor('#000000'))
     c.setFont('Helvetica', 9)
     values = [
@@ -297,7 +299,6 @@ def generate_pdf(data):
     x = table_x
     for i, col in enumerate(cols):
         c.drawString(x + 2, y + 6, str(values[i]))
-        # Vertical line
         if x > table_x:
             c.line(x, y, x, y + row_height)
         x += col['w']
@@ -338,4 +339,5 @@ def gerar():
     return send_file(pdf_path, as_attachment=True, download_name=filename, mimetype='application/pdf')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
